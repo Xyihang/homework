@@ -13,6 +13,7 @@ export const useTimer = (options: UseTimerOptions) => {
   const [isRunning, setIsRunning] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const warningCalledRef = useRef(false);
+  const timeRef = useRef(initialTime);
   
   const start = useCallback(() => {
     setIsRunning(true);
@@ -24,40 +25,40 @@ export const useTimer = (options: UseTimerOptions) => {
   }, []);
   
   const reset = useCallback((newTime?: number) => {
-    setTime(newTime || initialTime);
+    const resetTime = newTime || initialTime;
+    setTime(resetTime);
+    timeRef.current = resetTime;
     setIsRunning(false);
     warningCalledRef.current = false;
   }, [initialTime]);
   
   useEffect(() => {
-    if (isRunning && time > 0) {
+    if (isRunning && timeRef.current > 0) {
       timerRef.current = setInterval(() => {
-        setTime(prev => {
-          const newTime = prev - 1;
-          
-          // 检查是否需要警告
-          if (newTime === warningTime && !warningCalledRef.current) {
-            warningCalledRef.current = true;
-            onWarning?.();
-          }
-          
-          // 检查是否时间结束
-          if (newTime === 0) {
-            setIsRunning(false);
-            onTimeUp?.();
-          }
-          
-          return newTime;
-        });
+        const newTime = timeRef.current - 1;
+        timeRef.current = newTime;
+        setTime(newTime);
+
+        // 检查是否需要警告
+        if (newTime === warningTime && !warningCalledRef.current) {
+          warningCalledRef.current = true;
+          onWarning?.();
+        }
+
+        // 检查是否时间结束
+        if (newTime === 0) {
+          setIsRunning(false);
+          onTimeUp?.();
+        }
       }, 1000);
     }
-    
+
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
     };
-  }, [isRunning, time, onTimeUp, onWarning, warningTime]);
+  }, [isRunning, onTimeUp, onWarning, warningTime]);
   
   const formatTime = useCallback((seconds: number): string => {
     const mins = Math.floor(seconds / 60);

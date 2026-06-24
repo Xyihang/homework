@@ -111,7 +111,9 @@ export interface GameState {
   
   // 猎人状态
   hunterCanShoot: boolean;
-  
+  pendingHunterShoot: boolean;
+  hunterTarget: string | null;
+
   // 白痴状态
   idiotRevealed: boolean;
 }
