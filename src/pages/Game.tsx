@@ -28,6 +28,15 @@ export const Game: React.FC = () => {
   const [seerResult, setSeerResult] = useState<{ player: Player; isWerewolf: boolean } | null>(null);
   const [nightStep, setNightStep] = useState<'idle' | 'handoff' | 'action'>('idle');
 
+  // 重定向逻辑（必须在所有 return 之前，避免 render 期间导航）
+  const shouldRedirectHome = !['night', 'day', 'result'].includes(gameStore.phase);
+  const shouldRedirectResult = gameStore.phase === 'result';
+  useEffect(() => {
+    if (shouldRedirectHome) navigate('/');
+    else if (shouldRedirectResult) navigate('/result');
+  }, [shouldRedirectHome, shouldRedirectResult]);
+  if (shouldRedirectHome || shouldRedirectResult) return null;
+
   // timer 引用（用于在事件处理中访问）
   const timerInstanceRef = useRef<{ pause: () => void; reset: () => void; start: () => void } | null>(null);
 
@@ -332,18 +341,6 @@ export const Game: React.FC = () => {
   // 渲染白天阶段
   if (gameStore.phase === 'day') {
     return <DayPhase gameStore={gameStore} speak={speak} navigate={navigate} />;
-  }
-
-  // 未初始化 → 首页
-  if (!['night', 'day', 'result'].includes(gameStore.phase)) {
-    navigate('/');
-    return null;
-  }
-
-  // 结果页 → 重定向
-  if (gameStore.phase === 'result') {
-    navigate('/result');
-    return null;
   }
 
   return (
