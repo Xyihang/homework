@@ -147,11 +147,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const state = get();
     set({
       phase: 'night',
+      nightPhase: 'werewolf',
       round: 1,
       currentPlayerIndex: 0,
       currentNightActions: [],
       currentVotes: {},
-      currentSpeakerIndex: 0
+      currentSpeakerIndex: 0,
+      deadTonight: []
     });
 
     get().addLog({
