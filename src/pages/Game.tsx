@@ -29,6 +29,7 @@ export const Game: React.FC = () => {
   // 用于解决循环依赖的 refs
   const handleActionCompleteRef = useRef<() => void>(() => {});
   const nextNightPhaseRef = useRef<() => Promise<void>>(async () => {});
+  const startCurrentPhaseActionRef = useRef<() => Promise<void>>(async () => {});
   const timerRef = useRef<{ pause: () => void; reset: () => void; start: () => void }>({ pause: () => {}, reset: () => {}, start: () => {} });
 
   // timer 必须在 handleActionComplete 之前声明（因为后者引用前者）
@@ -75,10 +76,10 @@ export const Game: React.FC = () => {
   // 夜晚阶段自动开始行动
   useEffect(() => {
     if (gameStore.phase === 'night' && gameStore.nightPhase && !showHandoff && !showRoleReveal && !currentActionPlayer) {
-      const timeoutId = setTimeout(() => startCurrentPhaseAction(), 500);
+      const timeoutId = setTimeout(() => startCurrentPhaseActionRef.current(), 500);
       return () => clearTimeout(timeoutId);
     }
-  }, [gameStore.phase, gameStore.nightPhase, showHandoff, showRoleReveal, currentActionPlayer, startCurrentPhaseAction]);
+  }, [gameStore.phase, gameStore.nightPhase, showHandoff, showRoleReveal, currentActionPlayer]);
 
   // 获取当前行动的角色
   const getCurrentActionRole = useCallback((): RoleType | null => {
@@ -139,6 +140,11 @@ export const Game: React.FC = () => {
       await speak(SPEECH_MESSAGES.WITCH_WAKE);
     }
   }, [getCurrentActionPlayer, gameStore.nightPhase, speak]);
+
+  // 保持 startCurrentPhaseActionRef 同步
+  useEffect(() => {
+    startCurrentPhaseActionRef.current = startCurrentPhaseAction;
+  }, [startCurrentPhaseAction]);
   
   // 处理设备传递确认
   const handleHandoffConfirm = () => {
