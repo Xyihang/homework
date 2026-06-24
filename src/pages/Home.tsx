@@ -6,7 +6,8 @@ import { Button } from '../components/common/Button';
 import { Card } from '../components/common/Card';
 import { RoleCard, RoleDetailCard } from '../components/role/RoleCard';
 import { ROLES, RoleType } from '../data/roles';
-import { hasSavedGame } from '../utils/storage';
+import { hasSavedGame, loadGameState } from '../utils/storage';
+import { useGameStore } from '../store/gameStore';
 
 export const Home: React.FC = () => {
   const navigate = useNavigate();
@@ -19,6 +20,12 @@ export const Home: React.FC = () => {
   };
   
   const handleContinueGame = () => {
+    const savedState = loadGameState();
+    if (savedState) {
+      // 恢复游戏状态到 store
+      const { settings } = useGameStore.getState();
+      useGameStore.setState({ ...savedState, settings });
+    }
     navigate('/game');
   };
   

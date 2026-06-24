@@ -51,7 +51,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
       onClick={() => !disabled && onClick?.()}
     >
       <div className={clsx(
-        'h-full flex flex-col items-center justify-center p-3',
+        'relative h-full flex flex-col items-center justify-center p-3',
         'bg-gradient-to-br from-gray-800 to-gray-900',
         'border border-gray-700',
         selected && 'border-purple-500',

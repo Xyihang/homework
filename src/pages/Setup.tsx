@@ -9,6 +9,7 @@ import { RoleCard } from '../components/role/RoleCard';
 import { useGameStore } from '../store/gameStore';
 import { getRecommendedConfig, ROLES, RoleType } from '../data/roles';
 import { RecommendedConfig, RoleConfig, GameSettings } from '../types';
+import { clsx } from 'clsx';
 
 export const Setup: React.FC = () => {
   const navigate = useNavigate();
@@ -452,8 +453,3 @@ const AdvancedSettingsContent: React.FC<{
     </div>
   );
 };
-
-// clsx helper (imported at top but used here)
-function clsx(...args: any[]) {
-  return args.filter(Boolean).join(' ');
-}

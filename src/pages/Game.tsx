@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Moon, Sun, ArrowRight, Check, X } from 'lucide-react';
@@ -25,12 +25,32 @@ export const Game: React.FC = () => {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [witchChoice, setWitchChoice] = useState<'antidote' | 'poison' | 'none' | null>(null);
   const [seerResult, setSeerResult] = useState<{ player: Player; isWerewolf: boolean } | null>(null);
-  
+
+  // 用于 useTimer 回调的 ref（解决循环依赖）
+  const handleActionCompleteRef = useRef<() => void>(() => {});
+  const nextNightPhaseRef = useRef<() => Promise<void>>(async () => {});
+
+  // 完成行动（提前定义供 useTimer 使用）
+  const handleActionComplete = useCallback(() => {
+    timer.pause();
+    setSelectedTarget(null);
+    setWitchChoice(null);
+    setSeerResult(null);
+    setCurrentActionPlayer(null);
+
+    nextNightPhaseRef.current();
+  }, [timer]);
+
+  // 保持 ref 同步
+  useEffect(() => {
+    handleActionCompleteRef.current = handleActionComplete;
+  }, [handleActionComplete]);
+
   const timer = useTimer({
     initialTime: gameStore.settings.actionTime,
     onTimeUp: () => {
       // 自动执行默认操作
-      handleActionComplete();
+      handleActionCompleteRef.current();
     },
     onWarning: () => {
       speak(SPEECH_MESSAGES.TIME_WARNING);
@@ -44,23 +64,23 @@ export const Game: React.FC = () => {
     } else if (gameStore.phase === 'day') {
       speak(SPEECH_MESSAGES.DAY_START);
     }
-  }, [gameStore.phase, gameStore.round]);
+  }, [gameStore.phase, gameStore.round, speak]);
 
   // 夜晚阶段自动开始行动
   useEffect(() => {
     if (gameStore.phase === 'night' && gameStore.nightPhase && !showHandoff && !showRoleReveal && !currentActionPlayer) {
-      const timer = setTimeout(() => startCurrentPhaseAction(), 500);
-      return () => clearTimeout(timer);
+      const timeoutId = setTimeout(() => startCurrentPhaseAction(), 500);
+      return () => clearTimeout(timeoutId);
     }
-  }, [gameStore.phase, gameStore.nightPhase]);
-  
+  }, [gameStore.phase, gameStore.nightPhase, showHandoff, showRoleReveal, currentActionPlayer, startCurrentPhaseAction]);
+
   // 获取当前行动的角色
-  const getCurrentActionRole = (): RoleType | null => {
+  const getCurrentActionRole = useCallback((): RoleType | null => {
     if (gameStore.phase !== 'night') return null;
-    
+
     const nightPhase = gameStore.nightPhase;
     if (!nightPhase) return null;
-    
+
     // 找到该阶段需要行动的角色
     const actionRoles: Record<NightPhase, RoleType[]> = {
       werewolf: ['werewolf', 'wolfKing'],
@@ -69,40 +89,40 @@ export const Game: React.FC = () => {
       hunter: ['hunter'],
       other: []
     };
-    
+
     const roles = actionRoles[nightPhase] || [];
     if (roles.length === 0) return null;
-    
+
     // 找到存活的该角色玩家
     const alivePlayers = gameStore.players.filter(p => p.isAlive);
     for (const role of roles) {
       const player = alivePlayers.find(p => p.role === role);
       if (player) return role;
     }
-    
+
     return null;
-  };
-  
+  }, [gameStore.phase, gameStore.nightPhase, gameStore.players]);
+
   // 获取当前行动的玩家
-  const getCurrentActionPlayer = (): Player | null => {
+  const getCurrentActionPlayer = useCallback((): Player | null => {
     const role = getCurrentActionRole();
     if (!role) return null;
-    
+
     return gameStore.players.find(p => p.role === role && p.isAlive) || null;
-  };
-  
+  }, [getCurrentActionRole, gameStore.players]);
+
   // 开始当前阶段行动
-  const startCurrentPhaseAction = async () => {
+  const startCurrentPhaseAction = useCallback(async () => {
     const player = getCurrentActionPlayer();
     if (!player) {
       // 该阶段没有需要行动的角色，跳过
-      nextNightPhase();
+      nextNightPhaseRef.current();
       return;
     }
-    
+
     setCurrentActionPlayer(player);
     setShowHandoff(true);
-    
+
     // 播报提示
     const phase = gameStore.nightPhase;
     if (phase === 'werewolf') {
@@ -112,7 +132,7 @@ export const Game: React.FC = () => {
     } else if (phase === 'witch') {
       await speak(SPEECH_MESSAGES.WITCH_WAKE);
     }
-  };
+  }, [getCurrentActionPlayer, gameStore.nightPhase, speak]);
   
   // 处理设备传递确认
   const handleHandoffConfirm = () => {
@@ -209,21 +229,25 @@ export const Game: React.FC = () => {
   };
   
   // 进入下一个夜晚阶段
-  const nextNightPhase = async () => {
+  const nextNightPhase = useCallback(async () => {
     const phases: NightPhase[] = ['werewolf', 'seer', 'witch', 'hunter', 'other'];
     const currentIndex = phases.indexOf(gameStore.nightPhase || 'werewolf');
 
     if (currentIndex < phases.length - 1) {
       const nextPhase = phases[currentIndex + 1];
       gameStore.setNightPhase(nextPhase);
-
-      setTimeout(() => startCurrentPhaseAction(), 500);
+      // 不在这里调用 startCurrentPhaseAction，由 useEffect 自动触发
     } else {
       // 夜晚结束
       await speak(SPEECH_MESSAGES.NIGHT_END);
       gameStore.endNightPhase();
     }
-  };
+  }, [gameStore.nightPhase, gameStore.setNightPhase, gameStore.endNightPhase, speak]);
+
+  // 保持 nextNightPhaseRef 同步
+  useEffect(() => {
+    nextNightPhaseRef.current = nextNightPhase;
+  }, [nextNightPhase]);
   
   // 渲染夜晚阶段
   if (gameStore.phase === 'night') {
@@ -517,27 +541,34 @@ const DayPhase: React.FC<{
   const [phase, setPhase] = useState<'announce' | 'speech' | 'vote' | 'result'>('announce');
   const [currentSpeakerIndex, setCurrentSpeakerIndex] = useState(0);
   const [votes, setVotes] = useState<Record<string, string>>({});
-  const [showVoteResult, setShowVoteResult] = useState(false);
-  
+
+  // 使用 ref 存储 speak 和 navigate 以避免重渲染循环
+  const speakRef = useRef(speak);
+  const navigateRef = useRef(navigate);
+
+  // 保持 ref 最新
+  useEffect(() => { speakRef.current = speak; }, [speak]);
+  useEffect(() => { navigateRef.current = navigate; }, [navigate]);
+
   const alivePlayers = gameStore.players.filter(p => p.isAlive);
   const currentSpeaker = alivePlayers[currentSpeakerIndex];
-  
+
   useEffect(() => {
     if (phase === 'announce') {
       // 公布死讯
       const deadPlayers = gameStore.players.filter(p => !p.isAlive);
       const deadNames = deadPlayers.map(p => p.name);
-      speak(SPEECH_MESSAGES.ANNOUNCE_DEATH(deadNames));
-      
+      speakRef.current(SPEECH_MESSAGES.ANNOUNCE_DEATH(deadNames));
+
       setTimeout(() => {
         if (gameStore.checkGameEnd()) {
-          navigate('/result');
+          navigateRef.current('/result');
         } else {
           setPhase('speech');
         }
       }, 2000);
     }
-  }, [phase]);
+  }, [phase, gameStore.players, gameStore.checkGameEnd]);
   
   const handleNextSpeaker = () => {
     if (currentSpeakerIndex < alivePlayers.length - 1) {

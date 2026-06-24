@@ -16,6 +16,7 @@ export default function App() {
         <Route path="/assign" element={<Assign />} />
         <Route path="/game" element={<Game />} />
         <Route path="/result" element={<Result />} />
+        <Route path="*" element={<div className="min-h-screen flex items-center justify-center text-gray-400">页面不存在</div>} />
       </Routes>
     </Router>
   );

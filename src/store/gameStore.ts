@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { GameState, Player, RoleType, Camp, NightPhase, NightAction, GameLogEntry, GameSettings } from '../types';
 import { getRoleList, shuffleArray, generateId, ROLES } from '../data/roles';
+import { saveGameState } from '../utils/storage';
 
 interface GameStore extends GameState {
   // 游戏设置
@@ -52,6 +53,11 @@ interface GameStore extends GameState {
   useWitchPoison: (targetId: string) => void;
   hunterShoot: (targetId: string) => void;
   idiotReveal: () => void;
+
+  // 猎人开枪流程
+  setHunterTarget: (targetId: string | null) => void;
+  confirmHunterShoot: () => void;
+  skipHunterShoot: () => void;
 }
 
 const defaultSettings: GameSettings = {
@@ -91,7 +97,18 @@ const initialState: GameState = {
   witchHasAntidote: true,
   witchHasPoison: true,
   hunterCanShoot: true,
+  pendingHunterShoot: false,
+  hunterTarget: null,
   idiotRevealed: false
+};
+
+// 自动保存游戏状态
+const autoSave = (state: GameState) => {
+  try {
+    saveGameState(state);
+  } catch (e) {
+    console.error('自动保存失败', e);
+  }
 };
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -114,12 +131,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
       witchHasAntidote: true,
       witchHasPoison: true,
       hunterCanShoot: true,
+      pendingHunterShoot: false,
+      hunterTarget: null,
       idiotRevealed: false
     });
+    autoSave(get());
   },
   
   setPlayers: (players) => {
     set({ players, phase: 'assign' });
+    autoSave(get());
   },
   
   startGame: () => {
@@ -132,7 +153,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentVotes: {},
       currentSpeakerIndex: 0
     });
-    
+
     get().addLog({
       id: generateId(),
       round: 1,
@@ -141,6 +162,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       eventType: 'other',
       description: '游戏开始，第一夜'
     });
+    autoSave(get());
   },
   
   startNightPhase: () => {
@@ -221,14 +243,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentNightActions: [],
       deadTonight: []
     });
-    
+
     // 检查游戏结束
     if (get().checkGameEnd()) {
       return;
     }
-    
+
     // 开始白天阶段
     get().startDayPhase();
+    autoSave(get());
   },
   
   startDayPhase: () => {
@@ -292,9 +315,70 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const maxVotes = Math.max(...Object.values(voteCounts));
     const topVoted = Object.keys(voteCounts).filter(id => voteCounts[id] === maxVotes);
     
-    // 如果平票，需要重新投票
+    // 如果平票，随机淘汰一人
     if (topVoted.length > 1) {
-      // TODO: 处理平票情况
+      const randomIndex = Math.floor(Math.random() * topVoted.length);
+      const eliminatedId = topVoted[randomIndex];
+      const eliminatedPlayer = state.players.find(p => p.id === eliminatedId);
+
+      if (!eliminatedPlayer) return;
+
+      // 检查白痴技能
+      if (eliminatedPlayer.role === 'idiot' && !state.idiotRevealed) {
+        set({ idiotRevealed: true });
+        get().addLog({
+          id: generateId(),
+          round: state.round,
+          phase: 'day',
+          timestamp: new Date(),
+          eventType: 'action',
+          description: `${eliminatedPlayer.name}(白痴)翻牌免死（平票随机）`
+        });
+        set({ phase: 'night', round: state.round + 1 });
+        return;
+      }
+
+      const newPlayers = state.players.map(p =>
+        p.id === eliminatedId ? { ...p, isAlive: false } : p
+      );
+
+      get().addLog({
+        id: generateId(),
+        round: state.round,
+        phase: 'day',
+        timestamp: new Date(),
+        eventType: 'death',
+        description: `${eliminatedPlayer.name}(${ROLES[eliminatedPlayer.role].name})被投票出局（平票随机淘汰）`,
+        players: [eliminatedId]
+      });
+
+      const voteAction = {
+        round: state.round,
+        actionType: 'vote' as const,
+        votes: state.currentVotes,
+        eliminatedId
+      };
+
+      set({
+        players: newPlayers,
+        dayActions: [...state.dayActions, voteAction],
+        phase: 'night',
+        round: state.round + 1
+      });
+
+      // 检查猎人技能
+      if (eliminatedPlayer.role === 'hunter' && state.hunterCanShoot) {
+        set({ pendingHunterShoot: true, hunterTarget: null });
+        autoSave(get());
+        return; // 不继续到 checkGameEnd，等猎人开枪后再检查
+      }
+
+      if (get().checkGameEnd()) {
+        return;
+      }
+
+      get().startNightPhase();
+      autoSave(get());
       return;
     }
     
@@ -316,6 +400,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
       // 白痴免死，进入下一轮
       set({ phase: 'night', round: state.round + 1 });
+      autoSave(get());
       return;
     }
     
@@ -351,7 +436,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     
     // 检查猎人技能
     if (eliminatedPlayer.role === 'hunter' && state.hunterCanShoot) {
-      // TODO: 处理猎人开枪
+      set({ pendingHunterShoot: true, hunterTarget: null });
+      autoSave(get());
+      return; // 等待 UI 触发猎人开枪
     }
     
     // 检查游戏结束
@@ -361,6 +448,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     
     // 开始下一夜
     get().startNightPhase();
+    autoSave(get());
   },
   
   setCurrentPlayer: (index) => {
@@ -401,7 +489,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       phase: 'result',
       winner
     });
-    
+
     get().addLog({
       id: generateId(),
       round: state.round,
@@ -410,6 +498,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       eventType: 'result',
       description: winner === 'werewolf' ? '狼人阵营获胜' : '好人阵营获胜'
     });
+    autoSave(get());
   },
   
   addLog: (entry) => {
@@ -491,5 +580,45 @@ export const useGameStore = create<GameStore>((set, get) => ({
   
   idiotReveal: () => {
     set({ idiotRevealed: true });
+  },
+
+  setHunterTarget: (targetId) => {
+    set({ hunterTarget: targetId });
+  },
+
+  confirmHunterShoot: () => {
+    const state = get();
+    if (!state.pendingHunterShoot || !state.hunterTarget) return;
+
+    const targetId = state.hunterTarget;
+    get().hunterShoot(targetId);
+
+    set({ pendingHunterShoot: false, hunterTarget: null });
+
+    if (!get().checkGameEnd()) {
+      get().startNightPhase();
+    }
+    autoSave(get());
+  },
+
+  skipHunterShoot: () => {
+    const state = get();
+    if (!state.pendingHunterShoot) return;
+
+    set({ pendingHunterShoot: false, hunterTarget: null });
+
+    get().addLog({
+      id: generateId(),
+      round: state.round,
+      phase: 'day',
+      timestamp: new Date(),
+      eventType: 'action',
+      description: '猎人放弃开枪'
+    });
+
+    if (!get().checkGameEnd()) {
+      get().startNightPhase();
+    }
+    autoSave(get());
   }
 }));
