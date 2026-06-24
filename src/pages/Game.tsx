@@ -26,36 +26,42 @@ export const Game: React.FC = () => {
   const [witchChoice, setWitchChoice] = useState<'antidote' | 'poison' | 'none' | null>(null);
   const [seerResult, setSeerResult] = useState<{ player: Player; isWerewolf: boolean } | null>(null);
 
-  // 用于 useTimer 回调的 ref（解决循环依赖）
+  // 用于解决循环依赖的 refs
   const handleActionCompleteRef = useRef<() => void>(() => {});
   const nextNightPhaseRef = useRef<() => Promise<void>>(async () => {});
+  const timerRef = useRef<{ pause: () => void; reset: () => void; start: () => void }>({ pause: () => {}, reset: () => {}, start: () => {} });
 
-  // 完成行动（提前定义供 useTimer 使用）
-  const handleActionComplete = useCallback(() => {
-    timer.pause();
-    setSelectedTarget(null);
-    setWitchChoice(null);
-    setSeerResult(null);
-    setCurrentActionPlayer(null);
-
-    nextNightPhaseRef.current();
-  }, [timer]);
-
-  // 保持 ref 同步
-  useEffect(() => {
-    handleActionCompleteRef.current = handleActionComplete;
-  }, [handleActionComplete]);
-
+  // timer 必须在 handleActionComplete 之前声明（因为后者引用前者）
   const timer = useTimer({
     initialTime: gameStore.settings.actionTime,
     onTimeUp: () => {
-      // 自动执行默认操作
       handleActionCompleteRef.current();
     },
     onWarning: () => {
       speak(SPEECH_MESSAGES.TIME_WARNING);
     }
   });
+
+  // 保持 timerRef 同步
+  useEffect(() => {
+    timerRef.current = { pause: timer.pause, reset: timer.reset, start: timer.start };
+  }, [timer]);
+
+  // 完成行动（通过 timerRef 访问 timer，避免初始化顺序问题）
+  const handleActionComplete = useCallback(() => {
+    timerRef.current.pause();
+    setSelectedTarget(null);
+    setWitchChoice(null);
+    setSeerResult(null);
+    setCurrentActionPlayer(null);
+
+    nextNightPhaseRef.current();
+  }, []);
+
+  // 保持 ref 同步
+  useEffect(() => {
+    handleActionCompleteRef.current = handleActionComplete;
+  }, [handleActionComplete]);
   
   // 语音播报
   useEffect(() => {
