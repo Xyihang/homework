@@ -112,6 +112,8 @@ export const Game: React.FC = () => {
 
     const timeout = setTimeout(async () => {
       const player = findActionPlayer();
+      // DEBUG
+      console.log('[Game] night phase tick', { nightPhase: gameStore.nightPhase, round: gameStore.round, playersLen: gameStore.players.length, sample: gameStore.players[0] });
       if (!player) {
         // No one needs to act, skip to next phase
         triggeredPhaseRef.current = '';

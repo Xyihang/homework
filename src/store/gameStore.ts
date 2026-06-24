@@ -139,7 +139,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
   
   setPlayers: (players) => {
-    set({ players, phase: 'assign' });
+    // 自动填充默认字段（isAlive、hasUsedAbility），避免调用方遗漏
+    const normalized = players.map(p => ({
+      isAlive: true,
+      hasUsedAbility: false,
+      ...p
+    }));
+    set({ players: normalized, phase: 'assign' });
     autoSave(get());
   },
   
