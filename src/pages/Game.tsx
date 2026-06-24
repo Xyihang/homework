@@ -217,17 +217,6 @@ export const Game: React.FC = () => {
     handleActionComplete();
   };
   
-  // 完成行动
-  const handleActionComplete = () => {
-    timer.pause();
-    setSelectedTarget(null);
-    setWitchChoice(null);
-    setSeerResult(null);
-    setCurrentActionPlayer(null);
-    
-    nextNightPhase();
-  };
-  
   // 进入下一个夜晚阶段
   const nextNightPhase = useCallback(async () => {
     const phases: NightPhase[] = ['werewolf', 'seer', 'witch', 'hunter', 'other'];
