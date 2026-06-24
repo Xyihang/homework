@@ -479,6 +479,12 @@ export const Game: React.FC = () => {
     );
   }
   
+  // 游戏未开始，重定向到首页
+  if (!['night', 'day', 'result'].includes(gameStore.phase)) {
+    navigate('/');
+    return null;
+  }
+
   // 渲染结果页面
   if (gameStore.phase === 'result') {
     navigate('/result');
