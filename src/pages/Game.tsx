@@ -45,6 +45,14 @@ export const Game: React.FC = () => {
       speak(SPEECH_MESSAGES.DAY_START);
     }
   }, [gameStore.phase, gameStore.round]);
+
+  // 夜晚阶段自动开始行动
+  useEffect(() => {
+    if (gameStore.phase === 'night' && gameStore.nightPhase && !showHandoff && !showRoleReveal && !currentActionPlayer) {
+      const timer = setTimeout(() => startCurrentPhaseAction(), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [gameStore.phase, gameStore.nightPhase]);
   
   // 获取当前行动的角色
   const getCurrentActionRole = (): RoleType | null => {
@@ -204,14 +212,11 @@ export const Game: React.FC = () => {
   const nextNightPhase = async () => {
     const phases: NightPhase[] = ['werewolf', 'seer', 'witch', 'hunter', 'other'];
     const currentIndex = phases.indexOf(gameStore.nightPhase || 'werewolf');
-    
+
     if (currentIndex < phases.length - 1) {
       const nextPhase = phases[currentIndex + 1];
-      gameStore.startNightPhase();
-      // 这里需要更新 nightPhase 状态
-      // 由于 store 中没有直接的 setter，我们需要通过其他方式处理
-      
-      // 检查下一个阶段是否有行动角色
+      gameStore.setNightPhase(nextPhase);
+
       setTimeout(() => startCurrentPhaseAction(), 500);
     } else {
       // 夜晚结束

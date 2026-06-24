@@ -17,6 +17,7 @@ interface GameStore extends GameState {
   
   // 夜晚阶段
   startNightPhase: () => void;
+  setNightPhase: (phase: NightPhase) => void;
   executeNightAction: (action: NightAction) => void;
   endNightPhase: () => void;
   
@@ -150,6 +151,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentNightActions: [],
       deadTonight: []
     });
+  },
+
+  setNightPhase: (phase) => {
+    set({ nightPhase: phase });
   },
   
   executeNightAction: (action) => {
